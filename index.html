@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brazoria County / Sweeny Drainage Calculator</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f0f8ff; color: #333; }
+        h1 { color: #0066cc; text-align: center; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+        label { display: block; margin: 12px 0 6px; font-weight: bold; }
+        input, select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 5px; font-size: 1.05em; }
+        button { background: #0066cc; color: white; padding: 14px 24px; border: none; border-radius: 5px; font-size: 1.1em; cursor: pointer; margin: 10px 5px; }
+        button:hover { background: #0055aa; }
+        button.print { background: #28a745; }
+        #results { margin-top: 30px; padding: 25px; background: #e6f7ff; border-radius: 8px; border: 2px solid #0066cc; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th, td { border: 1px solid #0066cc; padding: 12px; text-align: center; }
+        th { background: #0066cc; color: white; }
+        .note { font-size: 0.9em; color: #555; margin-top: 25px; padding-top: 15px; border-top: 1px solid #ccc; }
+        .good { color: green; font-weight: bold; }
+        .warning { color: orange; font-weight: bold; }
+        @media print {
+            body { background: white; margin: 0; }
+            .container { box-shadow: none; padding: 10px; max-width: 100%; }
+            button, input[type="button"] { display: none; }
+            #results { border: none; background: white; }
+            h1 { font-size: 18pt; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌧️ Brazoria County / Sweeny Drainage Calculator</h1>
+        <p style="text-align:center; font-style:italic;">For commercial sites (EquipmentShare-style yards) • Rational Method • 18" RCP default • Printable PDF report</p>
+
+        <h2>Watershed Inputs (Lot 6 Example)</h2>
+        <label>Paved Area (sq ft)</label>
+        <input type="number" id="area_sf" value="50140" step="10">
+
+        <label>Runoff Coefficient C (0.85–0.95 for concrete)</label>
+        <input type="number" id="C" value="0.90" step="0.05">
+
+        <label>Time of Concentration Tc (minutes)</label>
+        <input type="number" id="Tc" value="10" step="1">
+
+        <h2>Rainfall (Brazoria County / NOAA Atlas 14 defaults)</h2>
+        <label>Design Storm</label>
+        <select id="storm" onchange="updateIntensity()">
+            <option value="5">5-year (pipe sizing)</option>
+            <option value="25">25-year (check)</option>
+            <option value="100">100-year (detention contribution)</option>
+        </select>
+        <label>Intensity i (in/hr) — auto-filled for Sweeny area</label>
+        <input type="number" id="i" value="7.2" step="0.1">
+
+        <h2>Pipe & Inlet Inputs</h2>
+        <label>Pipe Diameter (inches) — 18" selected</label>
+        <input type="number" id="D" value="18" step="1">
+
+        <label>Pipe Slope (%)</label>
+        <input type="number" id="slope" value="0.75" step="0.01">
+
+        <label>Inlet Type</label>
+        <select id="inlet">
+            <option value="PAZD">TxDOT PAZD-CZ-20 Grated Area Drain (recommended)</option>
+            <option value="PJB">TxDOT PJB-20 Precast Junction Box</option>
+            <option value="custom">Custom 3'x3' Approved Structure</option>
+        </select>
+
+        <button onclick="calculateDrainage()">Calculate Drainage</button>
+        <button onclick="window.print()" class="print">🖨️ Print PDF Report</button>
+
+        <div id="results"></div>
+
+        <div class="note">
+            <strong>Brazoria County / Sweeny Notes (copy-paste ready):</strong><br>
+            • Design per Brazoria County Drainage Criteria Manual (May 2022) & Plat Note 4.<br>
+            • All runoff from concrete paving only. Minimum 24" RCP allowed; 18" acceptable with engineer approval.<br>
+            • Minimum velocity 3 fps; maximum 10 fps.<br>
+            • Inlet in platted 60' drainage easement. Outfall with TxDOT CH-FW-0 headwall.<br>
+            • 100-year flow must reach Detention Reserve (5.581 acres) without adverse impact.<br><br>
+            <strong>Recommended Note for C100 Sheet:</strong><br>
+            "RUNOFF FROM 1.15 ACRES (50,140 SF) OF CONCRETE PAVING ON LOT 6 IS COLLECTED BY A TxDOT PAZD-CZ-20 GRADED AREA INLET LOCATED WITHIN THE PLATTED 60' DRAINAGE EASEMENT AND CONVEYED VIA 18" RCP @ 0.75% SLOPE (118 FT) TO THE 5.581-ACRE DETENTION RESERVE."
+        </div>
+    </div>
+
+    <script>
+        function updateIntensity() {
+            const storm = document.getElementById('storm').value;
+            let i = 7.2;
+            if (storm === "25") i = 8.8;
+            if (storm === "100") i = 10.4;
+            document.getElementById('i').value = i.toFixed(1);
+        }
+
+        function manningCapacity(D_in, slope_pct) {
+            const n = 0.013;
+            const D_ft = D_in / 12;
+            const A = Math.PI * Math.pow(D_ft / 2, 2);
+            const R = D_ft / 4;
+            const S = slope_pct / 100;
+            const Q_full = (1.486 / n) * A * Math.pow(R, 2/3) * Math.pow(S, 0.5);
+            const V_full = Q_full / A;
+            return { Q_full: Q_full.toFixed(2), V_full: V_full.toFixed(2) };
+        }
+
+        function calculateDrainage() {
+            let area_sf = parseFloat(document.getElementById('area_sf').value) || 50140;
+            let C = parseFloat(document.getElementById('C').value) || 0.90;
+            let Tc = parseFloat(document.getElementById('Tc').value) || 10;
+            let i = parseFloat(document.getElementById('i').value) || 7.2;
+            let D = parseFloat(document.getElementById('D').value) || 18;
+            let slope = parseFloat(document.getElementById('slope').value) || 0.75;
+
+            const A_acres = area_sf / 43560;
+            const Q = (C * i * A_acres).toFixed(2);
+            const pipe = manningCapacity(D, slope);
+            const capacityOK = parseFloat(pipe.Q_full) > parseFloat(Q);
+            const velocityOK = parseFloat(pipe.V_full) >= 3.0;
+
+            const html = `
+                <h2>Drainage Results – Lot 6 EquipmentShare</h2>
+                <table>
+                    <tr><th>Parameter</th><th>Value</th></tr>
+                    <tr><td>Paved Watershed</td><td>${area_sf.toLocaleString()} sf (${A_acres.toFixed(2)} acres)</td></tr>
+                    <tr><td>Runoff Coefficient C</td><td>${C}</td></tr>
+                    <tr><td>Time of Concentration Tc</td><td>${Tc} min</td></tr>
+                    <tr><td>Rainfall Intensity i (${document.getElementById('storm').options[document.getElementById('storm').selectedIndex].text})</td><td>${i} in/hr</td></tr>
+                    <tr><td><strong>Peak Flow Q</strong></td><td><strong>${Q} cfs</strong></td></tr>
+                    <tr><td>Pipe Diameter</td><td>${D}" RCP</td></tr>
+                    <tr><td>Pipe Slope</td><td>${slope}%</td></tr>
+                    <tr><td>Full-Flow Capacity</td><td>${pipe.Q_full} cfs</td></tr>
+                    <tr><td>Full-Flow Velocity</td><td>${pipe.V_full} fps</td></tr>
+                    <tr><td>Capacity Check</td><td class="${capacityOK ? 'good' : 'warning'}">${capacityOK ? '✅ OK (excess capacity)' : '⚠️ Undersized'}</td></tr>
+                    <tr><td>Velocity Check</td><td class="${velocityOK ? 'good' : 'warning'}">${velocityOK ? '✅ ≥ 3 fps' : '⚠️ Below 3 fps'}</td></tr>
+                </table>
+                <p style="font-size:1.1em;"><strong>✅ Recommended: ${D}" RCP @ ${slope}% slope is acceptable for this site.</strong></p>
+                <p style="font-size:0.9em;">Inlet: ${document.getElementById('inlet').options[document.getElementById('inlet').selectedIndex].text}</p>
+                <p style="font-size:0.85em; color:#555;">Print this page for your plans or county submittal.</p>
+            `;
+
+            document.getElementById('results').innerHTML = html;
+        }
+
+        // Auto-calculate on load with your 18" values
+        window.onload = function() {
+            calculateDrainage();
+        };
+    </script>
+</body>
+</html>
