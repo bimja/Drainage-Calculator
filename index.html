@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sweeny Lot 6 Drainage Calculator</title>
+    <title>South Texas Drainage Calculator (NOAA Atlas 14)</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background: #f0f8ff; }
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f0f8ff; color: #333; }
         .container { max-width: 950px; margin: 0 auto; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
         label { display: block; margin: 12px 0 6px; font-weight: bold; }
-        input, select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        input, select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 5px; font-size: 1.05em; }
         button { background: #0066cc; color: white; padding: 14px 24px; border: none; border-radius: 5px; font-size: 1.1em; cursor: pointer; margin: 10px 5px; }
         button.print { background: #28a745; }
         #results { margin-top: 30px; padding: 25px; background: #e6f7ff; border-radius: 8px; border: 2px solid #0066cc; }
@@ -17,101 +17,135 @@
         th { background: #0066cc; color: white; }
         .good { color: green; font-weight: bold; }
         .warning { color: orange; font-weight: bold; }
-        @media print { button, #mode { display: none; } }
+        @media print { button { display: none; } body { margin: 0; } }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🌧️ Sweeny Lot 6 Drainage Calculator (Brazoria County Compliant)</h1>
-        <p style="text-align:center;">Print-ready • Rational Method • Full-lot composite mode added</p>
+        <h1>🌧️ South Texas Drainage Calculator (NOAA Atlas 14)</h1>
+        <p style="text-align:center; font-style:italic;">Works for ANY South Texas coastal site • Rational Method • Printable PDF • 18" RCP default</p>
+
+        <label>Location Preset (updates intensities automatically)</label>
+        <select id="location" onchange="updateIntensities()">
+            <option value="generic">Generic South Texas Coastal (default)</option>
+            <option value="sweeny">Sweeny / Brazoria County</option>
+            <option value="houston">Houston / Harris County</option>
+            <option value="galveston">Galveston</option>
+            <option value="victoria">Victoria / Calhoun Area</option>
+            <option value="corpus">Corpus Christi Area</option>
+        </select>
 
         <label>Calculation Mode</label>
         <select id="mode" onchange="switchMode()">
-            <option value="paved">Paved Only (1.15 acres) — current note</option>
-            <option value="full" selected>Full Lot 6.743 acres (composite C=0.45) — recommended</option>
+            <option value="paved">Paved Area Only</option>
+            <option value="full" selected>Full Site / Composite Lot</option>
         </select>
 
-        <div id="inputs">
-            <!-- populated by JS -->
-        </div>
+        <div id="inputs"></div>
 
-        <button onclick="calculate()">Calculate & Update Note</button>
+        <label>Design Storm</label>
+        <select id="storm" onchange="updateIntensities()">
+            <option value="5">5-year (pipe sizing — recommended)</option>
+            <option value="25">25-year (check)</option>
+            <option value="100">100-year (detention contribution)</option>
+        </select>
+
+        <label>Rainfall Intensity i (in/hr) — from NOAA Atlas 14</label>
+        <input type="number" id="i" value="7.3" step="0.1">
+
+        <button onclick="calculate()">Calculate Drainage</button>
         <button onclick="window.print()" class="print">🖨️ Print PDF Report</button>
 
         <div id="results"></div>
 
         <div class="note" style="margin-top:30px;">
-            <strong>Recommended C100 Note (Full-Lot version):</strong><br>
-            RUNOFF FROM THE ENTIRE 6.743-ACRE LOT 6 IS COLLECTED BY A TxDOT PAZD-CZ-20 (OR 3'×3' APPROVED) DRAIN STRUCTURE IN THE PLATTED 60' DRAINAGE EASEMENT AND CONVEYED VIA [XX]" RCP @ 0.75% TO THE 5.581-ACRE DETENTION RESERVE. DESIGN PER BRAZORIA COUNTY DRAINAGE CRITERIA MANUAL USING WEIGHTED C=0.45.
+            <strong>Recommended Plan Note (copy-paste ready for any South Texas county):</strong><br>
+            RUNOFF FROM THE [ENTER AREA] IS COLLECTED BY A TxDOT PAZD-CZ-20 (OR APPROVED EQUIVALENT) DRAIN STRUCTURE AND CONVEYED VIA [XX]" RCP @ [XX]% SLOPE TO THE DETENTION FACILITY / OUTFALL. DESIGN PER LOCAL COUNTY DRAINAGE CRITERIA MANUAL USING NOAA ATLAS 14 RAINFALL AND RATIONAL METHOD.
         </div>
     </div>
 
     <script>
+        function updateIntensities() {
+            const loc = document.getElementById('location').value;
+            const storm = document.getElementById('storm').value;
+            let i = 7.3;
+            if (loc === "sweeny") i = (storm === "5") ? 7.2 : (storm === "25") ? 8.8 : 10.4;
+            else if (loc === "houston") i = (storm === "5") ? 7.4 : (storm === "25") ? 9.0 : 10.6;
+            else if (loc === "galveston") i = (storm === "5") ? 7.1 : (storm === "25") ? 8.7 : 10.3;
+            else if (loc === "victoria") i = (storm === "5") ? 7.0 : (storm === "25") ? 8.5 : 10.1;
+            else if (loc === "corpus") i = (storm === "5") ? 6.9 : (storm === "25") ? 8.4 : 9.9;
+            document.getElementById('i').value = i.toFixed(1);
+        }
+
         function switchMode() {
             const mode = document.getElementById('mode').value;
             let html = '';
             if (mode === 'paved') {
                 html = `
-                    <label>Paved Area (sf)</label><input type="number" id="area" value="50140">
-                    <label>C</label><input type="number" id="C" value="0.90" step="0.05">
-                    <label>Tc (min)</label><input type="number" id="Tc" value="10">
-                    <label>Pipe Diameter (in)</label><input type="number" id="D" value="18">
-                    <label>Slope (%)</label><input type="number" id="slope" value="0.75">
+                    <label>Paved Area (sq ft)</label><input type="number" id="area" value="50140">
+                    <label>Runoff Coefficient C</label><input type="number" id="C" value="0.90" step="0.05">
+                    <label>Time of Concentration Tc (min)</label><input type="number" id="Tc" value="10">
+                    <label>Pipe Diameter (inches)</label><input type="number" id="D" value="18">
+                    <label>Pipe Slope (%)</label><input type="number" id="slope" value="0.75">
                 `;
             } else {
                 html = `
-                    <label>Total Lot Area (acres) — Lot 6</label><input type="number" id="area_ac" value="6.743" readonly>
-                    <label>Weighted C (full lot)</label><input type="number" id="C" value="0.45" step="0.01">
-                    <label>Tc (min)</label><input type="number" id="Tc" value="12">
-                    <label>Pipe Diameter (in)</label><input type="number" id="D" value="24">
-                    <label>Slope (%)</label><input type="number" id="slope" value="0.75">
+                    <label>Total Site Area (acres)</label><input type="number" id="area_ac" value="6.743">
+                    <label>Weighted Runoff Coefficient C (composite)</label><input type="number" id="C" value="0.45" step="0.01">
+                    <label>Time of Concentration Tc (min)</label><input type="number" id="Tc" value="12">
+                    <label>Pipe Diameter (inches)</label><input type="number" id="D" value="24">
+                    <label>Pipe Slope (%)</label><input type="number" id="slope" value="0.75">
                 `;
             }
             document.getElementById('inputs').innerHTML = html;
         }
 
-        function manning(D, slope) {
-            const n = 0.013, Dft = D/12, A = Math.PI*(Dft/2)**2, R = Dft/4, S = slope/100;
-            const Q = (1.486/n) * A * R**(2/3) * S**0.5;
-            return {Q: Q.toFixed(1), V: (Q/A).toFixed(2)};
+        function manningCapacity(D, slope) {
+            const n = 0.013;
+            const Dft = D / 12;
+            const A = Math.PI * (Dft / 2) ** 2;
+            const R = Dft / 4;
+            const S = slope / 100;
+            const Q = (1.486 / n) * A * (R ** (2/3)) * (S ** 0.5);
+            return { Q: Q.toFixed(1), V: (Q / A).toFixed(2) };
         }
 
         function calculate() {
             const mode = document.getElementById('mode').value;
-            let A_ac, C, i = 7.2, Tc = parseFloat(document.getElementById('Tc').value);
-            let D = parseFloat(document.getElementById('D').value);
-            let slope = parseFloat(document.getElementById('slope').value);
-
-            if (mode === 'paved') {
-                A_ac = parseFloat(document.getElementById('area').value) / 43560;
-                C = parseFloat(document.getElementById('C').value);
-            } else {
-                A_ac = 6.743;
-                C = parseFloat(document.getElementById('C').value);
-            }
+            let A_ac = mode === 'paved' ? parseFloat(document.getElementById('area').value) / 43560 : parseFloat(document.getElementById('area_ac').value);
+            const C = parseFloat(document.getElementById('C').value);
+            const i = parseFloat(document.getElementById('i').value);
+            const D = parseFloat(document.getElementById('D').value);
+            const slope = parseFloat(document.getElementById('slope').value);
+            const Tc = parseFloat(document.getElementById('Tc').value);
 
             const Q = (C * i * A_ac).toFixed(1);
-            const cap = manning(D, slope);
-            const ok = parseFloat(cap.Q) > parseFloat(Q);
+            const cap = manningCapacity(D, slope);
+            const ok = parseFloat(cap.Q) >= parseFloat(Q);
 
             const html = `
-                <h2>Results — ${mode === 'paved' ? 'Paved Only' : 'Full Lot 6.743 acres'}</h2>
+                <h2>Results — ${document.getElementById('location').options[document.getElementById('location').selectedIndex].text}</h2>
                 <table>
-                    <tr><th>Item</th><th>Value</th></tr>
+                    <tr><th>Parameter</th><th>Value</th></tr>
                     <tr><td>Area</td><td>${A_ac.toFixed(2)} acres</td></tr>
                     <tr><td>C</td><td>${C}</td></tr>
-                    <tr><td>i (5-yr)</td><td>7.2 in/hr</td></tr>
-                    <tr><td><strong>Q</strong></td><td><strong>${Q} cfs</strong></td></tr>
+                    <tr><td>Tc</td><td>${Tc} min</td></tr>
+                    <tr><td>i (${document.getElementById('storm').options[document.getElementById('storm').selectedIndex].text})</td><td>${i} in/hr</td></tr>
+                    <tr><td><strong>Peak Flow Q</strong></td><td><strong>${Q} cfs</strong></td></tr>
                     <tr><td>Pipe</td><td>${D}" RCP @ ${slope}%</td></tr>
                     <tr><td>Capacity</td><td>${cap.Q} cfs @ ${cap.V} fps</td></tr>
-                    <tr><td>Status</td><td class="${ok ? 'good' : 'warning'}">${ok ? '✅ Sufficient' : '⚠️ Surcharge Risk — Upgrade Recommended'}</td></tr>
+                    <tr><td>Status</td><td class="${ok ? 'good' : 'warning'}">${ok ? '✅ Pipe is sufficient' : '⚠️ Upgrade pipe or slope recommended'}</td></tr>
                 </table>
-                <p><strong>Print this page for your plans.</strong></p>
+                <p style="font-size:1.1em;"><strong>Print this page for your site plans or county submittal.</strong></p>
             `;
             document.getElementById('results').innerHTML = html;
         }
 
-        window.onload = () => { switchMode(); calculate(); };
+        window.onload = function() {
+            switchMode();
+            updateIntensities();
+            calculate();
+        };
     </script>
 </body>
 </html>
